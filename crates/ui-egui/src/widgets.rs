@@ -308,7 +308,15 @@ pub trait CenteredDialog {
 
 impl CenteredDialog for egui::Window<'_> {
     fn centered(self, ctx: &egui::Context) -> Self {
-        self.pivot(Align2::CENTER_CENTER).default_pos(dialog_center(ctx))
+        let window = self.pivot(Align2::CENTER_CENTER).default_pos(dialog_center(ctx));
+        if ctx.data(|d| d.get_temp::<bool>(egui::Id::new("mobile-host"))).unwrap_or(false) {
+            window
+                .default_width((ctx.content_rect().width() - 40.0).clamp(160.0, 360.0))
+                .max_width((ctx.content_rect().width() - 32.0).max(160.0))
+                .constrain_to(ctx.content_rect())
+        } else {
+            window
+        }
     }
 }
 

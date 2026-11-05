@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The original app-icon palette: assets/app-icon/README.md. -->
+    <color name="filmcraft_blue">#8b5cf6</color>
+</resources>

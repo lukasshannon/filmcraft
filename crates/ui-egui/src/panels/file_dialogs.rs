@@ -43,7 +43,7 @@ pub fn show_recovery(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
     let mut choice = app.file_dialogs.recovery_choice.min(items.len() - 1);
     let mut open = true;
     egui::Modal::new(egui::Id::new("recovery-modal")).frame(modal_frame(&t)).show(ctx, |ui| {
-        ui.set_width(520.0);
+        ui.set_width(if app.mobile_host { (ctx.content_rect().width() - 40.0).clamp(160.0, 520.0) } else { 520.0 });
         Frame::new().inner_margin(Margin { left: 28, right: 28, top: 24, bottom: 20 }).show(ui, |ui| {
             ui.label(RichText::new(tl!("Recover Unsaved Changes")).size(18.0).strong().color(t.text));
             ui.add_space(6.0);
@@ -109,7 +109,7 @@ pub fn show_revert(app: &mut FilmcraftApp, ctx: &egui::Context) -> bool {
     let file = app.session.path.as_deref().and_then(|p| std::path::Path::new(p).file_name()).map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let mut open = true;
     let r = egui::Modal::new(egui::Id::new("revert-modal")).frame(modal_frame(&t)).show(ctx, |ui| {
-        ui.set_width(460.0);
+        ui.set_width(if app.mobile_host { (ctx.content_rect().width() - 40.0).clamp(160.0, 460.0) } else { 460.0 });
         Frame::new().inner_margin(Margin { left: 28, right: 28, top: 24, bottom: 20 }).show(ui, |ui| {
             ui.label(RichText::new(tl!("Revert")).size(18.0).strong().color(t.text));
             ui.add_space(6.0);

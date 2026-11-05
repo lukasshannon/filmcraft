@@ -1,0 +1,8 @@
+asset:        ic_launcher_foreground.xml
+title:        FilmCraft Android adaptive launcher layout
+author:       Android port contributors
+source:       original work (resource XML; references existing assets/app-icon artwork)
+license:      MIT OR Apache-2.0
+license-file: LICENSE-MIT
+added:        2026-11-04 by Codex (agent) for @lukasshannon
+notes:        Adaptive-mask layout only. The referenced artwork keeps its existing assets/app-icon/LICENSE.txt notice; no third-party artwork was copied or redrawn.

@@ -77,6 +77,8 @@ use dock::PanelKind;
 use frames::{FrameKey, FrameServer, Target};
 use native_dialogs::FileDialog;
 use state::UiState;
+pub mod mobile;
+pub mod screen_edges;
 use theme::{ThemeKind, Tokens};
 
 /// Audio output provided by the platform layer (cpal on desktop, WebAudio on web).
@@ -284,6 +286,8 @@ pub(crate) const EXPORT_SAVE_DIALOGS: [(&str, &str, &str); 7] = [
 ];
 
 pub struct FilmcraftApp {
+    /// Phone host: reuse the editor panels in a compact, rotation-aware arrangement.
+    pub mobile_host: bool,
     pub session: Session,
     pub ui: UiState,
     pub tokens: Tokens,
@@ -553,6 +557,7 @@ impl FilmcraftApp {
             session.prefs_path.as_ref().and_then(|p| p.parent()).map(|d| dock::WorkspacePrefs::load(&d.join(dock::WORKSPACES_FILE))).unwrap_or_default();
         let language = i18n::Language::parse(&session.prefs.general.interface_language).unwrap_or_default();
         Self {
+            mobile_host: false,
             session,
             ui: UiState { language, ..UiState::default() },
             tokens: Tokens::for_kind(ThemeKind::Dark),
@@ -1869,6 +1874,11 @@ impl FilmcraftApp {
         let t = self.tokens;
         let full = ui.max_rect();
         ui.painter().rect_filled(full, 0.0, t.app_bg);
+        if self.mobile_host {
+            mobile::show(self, ui, full);
+            panels::dialogs::show(self, &ctx);
+            return;
+        }
         let header_h = if self.ui.show_header { 38.0 } else { 0.0 };
         let header = egui::Rect::from_min_size(full.min, egui::vec2(full.width(), header_h));
         if self.ui.show_header {

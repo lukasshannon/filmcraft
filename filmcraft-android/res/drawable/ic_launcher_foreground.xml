@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 60 units of artwork on Android's 108-unit adaptive canvas keeps the ears
+     inside circular masks. The matching violet background fills the whole icon. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="22.222222%"
+    android:insetTop="22.222222%"
+    android:insetRight="22.222222%"
+    android:insetBottom="22.222222%">
+    <bitmap android:src="@drawable/filmcraft_artwork"
+        android:gravity="fill" android:filter="true" />
+</inset>

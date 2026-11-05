@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="app.filmcraft.android" android:versionCode="100001" android:versionName="0.10.0-android.1">
+    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="35" />
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />
+    <application android:label="FilmCraft" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher"
+        android:theme="@android:style/Theme.Material.NoActionBar.Fullscreen"
+        android:allowBackup="false" android:hasCode="true" android:extractNativeLibs="false"
+        android:usesCleartextTraffic="false" android:hardwareAccelerated="true">
+        <activity android:name=".FilmCraftActivity" android:exported="true"
+            android:screenOrientation="fullSensor" android:resizeableActivity="true"
+            android:configChanges="orientation|keyboardHidden|screenSize|screenLayout|uiMode|density|layoutDirection"
+            android:windowSoftInputMode="adjustResize">
+            <meta-data android:name="android.app.lib_name" android:value="filmcraft_android" />
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>

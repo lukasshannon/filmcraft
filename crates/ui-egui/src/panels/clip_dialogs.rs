@@ -309,7 +309,7 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) {
     let mut action: Option<&'static str> = None;
     let project_name = app.session.project.name.clone();
     // a never-saved project is saved through the Save dialog
-    let can_save = app.session.path.is_some() || app.hooks.pick_save.is_some();
+    let can_save = app.session.path.is_some() || app.hooks.pick_save.is_some() || app.hooks.run_dialog.is_some();
     // the title is translated; the window keeps one id whatever the interface language
     let id = egui::Id::new(("clip-dialog", pre));
     egui::Window::new(title).id(id).collapsible(false).resizable(false).default_width(360.0).centered(ctx).show(ctx, |ui| {
@@ -606,6 +606,36 @@ pub fn show(app: &mut FilmcraftApp, ctx: &egui::Context) {
         }
         Some("dontSave") | Some("save") => {
             if action == Some("save") {
+                if app.session.path.is_none() && app.hooks.run_dialog.is_some() {
+                    // Resume the close only after the asynchronous picker succeeds.
+                    // Cancelling restores the same dirty-document prompt.
+                    let draft = d.clone();
+                    let quit = d.command == "app.quit";
+                    let ctx = ctx.clone();
+                    app.ui.clip_dialog = None;
+                    let dialog = crate::native_dialogs::FileDialog::SaveProject { name: format!("{}.fcproj", app.session.project.name) };
+                    let result = app.pick(dialog, move |app, paths| {
+                        let Some(path) = paths.into_iter().next() else {
+                            app.ui.clip_dialog = Some(draft);
+                            return Ok(Value::Null);
+                        };
+                        if let Err(e) = app.session.execute("file.saveAs", json!({"path":path})) {
+                            app.ui.clip_dialog = Some(draft);
+                            return Err(e.to_string());
+                        }
+                        if quit {
+                            app.quit_confirmed = true;
+                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                        } else {
+                            app.session.execute("file.closeProject", json!({"force":true})).map_err(|e| e.to_string())?;
+                        }
+                        Ok(Value::Null)
+                    });
+                    if let Err(e) = result {
+                        app.status(e);
+                    }
+                    return;
+                }
                 let saved = if app.session.path.is_some() {
                     app.session.execute("file.save", json!({})).map(|_| ()).map_err(|e| e.to_string())
                 } else {

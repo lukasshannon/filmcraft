@@ -10,6 +10,33 @@ use serde_json::{Value, json};
 use crate::Session;
 
 #[test]
+fn streamed_export_provider_failure_is_a_job_error_and_keeps_local_file() {
+    struct FailingProvider;
+    impl crate::Services for FailingProvider {
+        fn read_file(&self, p: &str) -> std::io::Result<Vec<u8>> {
+            std::fs::read(p)
+        }
+        fn write_file(&self, p: &str, d: &[u8]) -> std::io::Result<()> {
+            std::fs::write(p, d)
+        }
+        fn publish_export(&self, report: &filmcraft_export::Report) -> std::io::Result<()> {
+            assert!(std::path::Path::new(&report.path).is_file());
+            Err(std::io::Error::other("provider disconnected"))
+        }
+    }
+    let mut session = Session::new(std::sync::Arc::new(FailingProvider));
+    session.execute("file.openDemoProject", json!({})).unwrap();
+    let dir = Scratch::new("provider-failed");
+    let path = dir.path("kept.wav");
+    let result = session.execute("file.exportMedia", json!({"path":path,"format":"wav","range":"custom","startSeconds":0,"endSeconds":0.05,"wait":true}));
+    assert!(result.is_err(), "{result:?}");
+    assert!(std::fs::metadata(&path).unwrap().len() > 44);
+    let job = session.jobs.last().unwrap();
+    let error = job.result.lock().unwrap().clone().unwrap().unwrap_err();
+    assert!(error.contains("provider disconnected"), "{error}");
+}
+
+#[test]
 fn hostile_export_ranges_are_rejected_without_panicking() {
     let mut session = demo();
     for params in [

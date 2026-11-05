@@ -1,5 +1,14 @@
 # FilmCraft interface
 
+The unofficial Android host sets `FilmcraftApp::mobile_host` and reuses the same
+panels in `mobile.rs`: preview above the active panel in portrait, beside it in
+landscape. Its compact export action uses `HostHooks::run_dialog`; provider work
+stays off the frame thread. Rounded glass pads only edge controls through
+`screen_edges`, while keyboard coverage is handled by the host. The Android build
+excludes the trademark wordmark as required by its licence. Some advanced desktop
+forms still need phone-specific layout work; primary mobile workflows are tested
+separately from desktop parity.
+
 The egui frontend draws panels and dialogs, and dispatches project changes through the engine.
 Interactive controls keep stable automation ids regardless of the interface language.
 

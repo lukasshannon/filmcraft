@@ -179,6 +179,13 @@ pub fn targets_source(app: &FilmcraftApp, params: &Value) -> bool {
 
 /// Execute a UI or engine command by id.
 pub fn invoke(app: &mut FilmcraftApp, ctx: &egui::Context, id: &str, mut params: Value) -> Result<Value, String> {
+    if app.mobile_host && params.get("path").is_none() && matches!(id, "file.exportMedia" | "mode.export") {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("mobile-export"), true));
+        return Ok(json!({"dialog":"mobile-export"}));
+    }
+    if app.mobile_host && id == "mode.import" {
+        return app.file_dialog("file.import", &params);
+    }
     if id == "edit.selectAll" && (crate::panels::graphics::select_all_edited_text(app) || crate::panels::effect_controls::select_all_keyframes(app)) {
         return Ok(Value::Null);
     }

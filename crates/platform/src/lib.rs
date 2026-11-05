@@ -30,6 +30,9 @@
 
 // Used by the Windows (and, for `biplanar`, Linux) decoders; compiled everywhere so their tests run
 // on every system.
+#[cfg(target_os = "android")]
+#[allow(unsafe_code)]
+pub mod android_audio;
 #[cfg_attr(not(target_os = "windows"), allow(dead_code))]
 mod annexb;
 #[cfg_attr(not(any(target_os = "windows", target_os = "linux")), allow(dead_code))]

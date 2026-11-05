@@ -142,6 +142,11 @@ pub trait Services: Send + Sync {
     fn export_in_memory(&self) -> bool {
         false
     }
+    /// Publish streamed export files to the host's document provider. Called on
+    /// the export worker only after encoding succeeds; failures remain job errors.
+    fn publish_export(&self, _report: &filmcraft_export::Report) -> std::io::Result<()> {
+        Ok(())
+    }
     /// Entries of a directory with their kind, size and date (the Media Browser). The default
     /// derives them from [`Services::list_dir`] (every name a file).
     fn list_entries(&self, dir: &str) -> Option<std::io::Result<Vec<media_browser::DirEntry>>> {

@@ -6,3 +6,12 @@ plan/
 .DS_Store
 .claude/worktrees/
 __pycache__/
+
+# Android port: local tools, private signing identity and generated outputs
+/.tools/
+/.private/
+/artifacts/
+/craft-fonts/
+/filmcraft-android/target/
+/filmcraft-android/target-host/
+/filmcraft-android/build/

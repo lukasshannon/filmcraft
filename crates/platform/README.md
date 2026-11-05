@@ -1,5 +1,14 @@
 # filmcraft-platform
 
+Android builds also expose `android_audio::Output`: an AAudio stereo float stream
+through the Rust `ndk` bindings, mixed and written on a guarded worker. The safe
+API reports device rate and played frames to the frontend. FFI stays in this
+crate, with checked buffers and documented unsafe calls. `ndk` 0.9 misclassifies
+positive blocking-write frame counts as unknown errors; the adapter interprets
+those counts according to AAudio's nonnegative-success contract. Native emulator
+playback checks that the Android audio clock advances. Android hardware video
+codecs and microphone capture are not enabled.
+
 OS media integration for FilmCraft (layer L5): hardware video decoding through the operating
 system's codecs, behind `filmcraft_codecs::VideoDecoder`, and hardware H.264 and H.265 (HEVC)
 encoding, behind `filmcraft_export::VideoEncoder`. It holds OS media FFI and nothing else.

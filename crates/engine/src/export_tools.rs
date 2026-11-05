@@ -490,8 +490,14 @@ pub fn spawn_export(s: &mut Session, project: Arc<Project>, seq: ItemId, mut set
         s.stepped.push(crate::SteppedJob { job: id, exporter, provider, progress: prog, result: res });
         return Ok(id);
     }
+    let services = s.services.clone();
     let run = move || {
-        let r = filmcraft_export::export(&project, seq, &settings, &provider, &prog).map_err(|e| e.to_string());
+        let r = filmcraft_export::export(&project, seq, &settings, &provider, &prog).map_err(|e| e.to_string()).and_then(|report| {
+            prog.finished.store(false, Ordering::Relaxed);
+            services.publish_export(&report).map_err(|e| format!("Export kept on device; saving to Android storage failed: {e}"))?;
+            prog.finished.store(true, Ordering::Relaxed);
+            Ok(report)
+        });
         *offline.lock().unwrap_or_else(|x| x.into_inner()) = provider.offline_used();
         if let Err(e) = &r {
             *prog.error.lock().unwrap_or_else(|x| x.into_inner()) = Some(e.clone());

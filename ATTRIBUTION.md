@@ -9,6 +9,8 @@ iconography, images or other Adobe assets; open licences only; every asset attri
 
 | Asset | Author | Source | Licence |
 |---|---|---|---|
+| `filmcraft-android/res/drawable/ic_launcher_foreground.xml` | Android port contributors | Original resource XML referencing the existing app icon in `assets/app-icon/` | MIT OR Apache-2.0 (`LICENSE-MIT`, `assets/app-icon/LICENSE.txt`) |
+| `filmcraft-android/res/mipmap-anydpi-v26/ic_launcher.xml` | Android port contributors | Original resource XML referencing the existing app icon in `assets/app-icon/` | MIT OR Apache-2.0 (`LICENSE-MIT`, `assets/app-icon/LICENSE.txt`) |
 | `crates/ui-egui/src/i18n/it.tsv` | FilmCraft contributors | Original work: clean-room Italian interface translations | MIT OR Apache-2.0 |
 | `crates/ui-egui/src/i18n/id.tsv` | FilmCraft contributors | Original work: clean-room Indonesian interface translations | MIT OR Apache-2.0 |
 | `crates/ui-egui/src/i18n/ko.tsv` | FilmCraft contributors | Original work: clean-room Korean interface translations | MIT OR Apache-2.0 |
