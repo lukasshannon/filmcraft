@@ -1,0 +1,193 @@
+name: Android APK
+
+on:
+  push:
+    branches: [android-apk]
+  pull_request:
+    branches: [android-apk]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_BUILD_JOBS: '2'
+  PYTHONUTF8: '1'
+  RUSTUP_TOOLCHAIN: 1.95.0
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Test release versioning and signing safeguards
+        run: python3 -m unittest discover -s scripts -p test_android_release.py -v
+      - name: Check packaging Python syntax
+        run: python3 -m py_compile build-filmcraft-apk.py scripts/android_release.py
+
+  build:
+    needs: validate
+    if: github.repository == 'lukasshannon/filmcraft' && github.ref == 'refs/heads/android-apk' && github.event_name != 'pull_request'
+    runs-on: windows-2022
+    timeout-minutes: 180
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      SIGNING_CERT_SHA256: '8172f04ccb3be904900350af93531d62a83f23a8526d997f86873510bae35b58'
+      ANDROID_KEY_ALIAS: 'filmcraft-test'
+      ANDROID_STORE_PASSWORD: android
+      ANDROID_KEY_PASSWORD: android
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: storytold/craft-fonts
+          ref: 43a994403242b287ab4c78499b7ff7d943ea6dba
+          path: craft-fonts
+          persist-credentials: false
+      - name: Compute unique installable version
+        id: version
+        run: python scripts/android_release.py filmcraft-android/AndroidManifest.xml $env:GITHUB_RUN_NUMBER
+      - name: Restore and verify existing APK signing identity
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:KEYSTORE_BASE64)) {
+            throw 'Set repository Actions secret ANDROID_KEYSTORE_BASE64 to the existing app keystore. CI will not generate a replacement.'
+          }
+          $keyPath = Join-Path $env:RUNNER_TEMP 'filmcraft-signing.jks'
+          [IO.File]::WriteAllBytes($keyPath, [Convert]::FromBase64String($env:KEYSTORE_BASE64))
+          $certificate = Join-Path $env:RUNNER_TEMP 'filmcraft-signing.der'
+          & "$env:JAVA_HOME_21_X64/bin/keytool.exe" -exportcert -keystore $keyPath -alias $env:ANDROID_KEY_ALIAS -storepass:env ANDROID_STORE_PASSWORD -file $certificate
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot read APK signing certificate' }
+          if ((Get-FileHash -LiteralPath $certificate -Algorithm SHA256).Hash.ToLowerInvariant() -ne $env:SIGNING_CERT_SHA256) {
+            throw 'APK signing certificate does not match existing distributed builds'
+          }
+          "ANDROID_KEYSTORE=$keyPath" >> $env:GITHUB_ENV
+      - name: Install pinned Rust and Android tools
+        run: |
+          rustup toolchain install 1.95.0 --profile minimal
+          if ($LASTEXITCODE -ne 0) { throw 'Rust installation failed' }
+          rustup target add aarch64-linux-android --toolchain 1.95.0
+          if ($LASTEXITCODE -ne 0) { throw 'Rust Android target installation failed' }
+          $sdkRoot = $env:ANDROID_HOME
+          & "$sdkRoot/cmdline-tools/latest/bin/sdkmanager.bat" --install 'platforms;android-35' 'build-tools;35.0.0' 'ndk;27.2.12479018'
+          if ($LASTEXITCODE -ne 0) { throw 'Android SDK installation failed' }
+          $ndkBin = Join-Path $sdkRoot 'ndk/27.2.12479018/toolchains/llvm/prebuilt/windows-x86_64/bin'
+          "JAVA_HOME=$env:JAVA_HOME_21_X64" >> $env:GITHUB_ENV
+          "ANDROID_BUILD_TOOLS=$sdkRoot/build-tools/35.0.0" >> $env:GITHUB_ENV
+          "ANDROID_NDK_HOME=$sdkRoot/ndk/27.2.12479018" >> $env:GITHUB_ENV
+          "CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER=$ndkBin/aarch64-linux-android28-clang.cmd" >> $env:GITHUB_ENV
+          "CC_aarch64_linux_android=$ndkBin/aarch64-linux-android28-clang.cmd" >> $env:GITHUB_ENV
+          "AR_aarch64_linux_android=$ndkBin/llvm-ar.exe" >> $env:GITHUB_ENV
+          "RUSTFLAGS=-C link-arg=-Wl,-z,max-page-size=16384 -C link-arg=-Wl,-z,common-page-size=16384" >> $env:GITHUB_ENV
+          "CARGO_TARGET_DIR=$env:GITHUB_WORKSPACE/filmcraft-android/target" >> $env:GITHUB_ENV
+          "CRAFT_FONTS_DIR=$env:GITHUB_WORKSPACE/craft-fonts" >> $env:GITHUB_ENV
+          'CRAFT_FONTS_REQUIRED=1' >> $env:GITHUB_ENV
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            filmcraft-android/target
+          key: android-arm64-windows-rust195-ndk27c-${{ hashFiles('filmcraft-android/Cargo.lock', 'Cargo.lock') }}-${{ github.sha }}
+          restore-keys: |
+            android-arm64-windows-rust195-ndk27c-${{ hashFiles('filmcraft-android/Cargo.lock', 'Cargo.lock') }}-
+      - name: Build and verify signed production APK
+        env:
+          APK_VERSION: ${{ steps.version.outputs.version }}
+          APK_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          python build-filmcraft-apk.py --abi arm64-v8a --version-name $env:APK_VERSION --version-code $env:APK_CODE
+          if ($LASTEXITCODE -ne 0) { throw 'APK build or signature/alignment verification failed' }
+      - name: Collect release files and source provenance
+        env:
+          APK_VERSION: ${{ steps.version.outputs.version }}
+          APK_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          New-Item -ItemType Directory -Path release-assets | Out-Null
+          $apkFiles = @(Get-ChildItem -Path artifacts -Filter "filmcraft-$env:APK_VERSION-arm64.apk" -Recurse)
+          if ($apkFiles.Count -ne 1 -or $apkFiles[0].Length -eq 0) { throw 'Expected exactly one nonempty versioned APK' }
+          $apk = $apkFiles[0]
+          Copy-Item -LiteralPath $apk.FullName -Destination release-assets
+          Copy-Item -LiteralPath (Join-Path $apk.DirectoryName 'build-arm64.json') -Destination release-assets
+          $hash = (Get-FileHash -LiteralPath $apk.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($apk.Name)" | Set-Content -Encoding utf8NoBOM release-assets/SHA256SUMS.txt
+          @{
+            repository = $env:GITHUB_REPOSITORY
+            source_commit = $env:GITHUB_SHA
+            version_name = $env:APK_VERSION
+            version_code = [long]$env:APK_CODE
+            signing_certificate_sha256 = $env:SIGNING_CERT_SHA256
+            workflow_run = "https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+            craft_fonts_commit = '43a994403242b287ab4c78499b7ff7d943ea6dba'
+          } | ConvertTo-Json | Set-Content -Encoding utf8NoBOM release-assets/ci-source.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: android-release
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 14
+      - name: Remove temporary signing key
+        if: always()
+        run: |
+          foreach ($name in @('filmcraft-signing.jks', 'filmcraft-signing.der')) {
+            $keyFile = Join-Path $env:RUNNER_TEMP $name
+            if (Test-Path -LiteralPath $keyFile) { Remove-Item -LiteralPath $keyFile -Force }
+          }
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: android-release-${{ needs.build.outputs.tag }}
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: android-release
+          path: release-assets
+      - name: Publish versioned APK release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd release-assets
+          sha256sum --check SHA256SUMS.txt
+          if gh release view "$TAG" --json isDraft,targetCommitish > existing-release.json 2>/dev/null; then
+            test "$(jq -r .targetCommitish existing-release.json)" = "$SOURCE_SHA"
+            if test "$(jq -r .isDraft existing-release.json)" = false; then
+              echo 'This run already published its release; leaving it unchanged.'
+              exit 0
+            fi
+          else
+            printf '%s\n' \
+              'Unofficial FilmCraft Android build for ARM64 phones (Android 9+).' \
+              "Source commit: $SOURCE_SHA" \
+              "Build: https://github.com/$GH_REPO/actions/runs/$GITHUB_RUN_ID" \
+              'Signed with the retained Android port certificate; not an upstream or Play Store release.' \
+              'Signature and 16 KiB APK alignment were checked during packaging. This build is not a device smoke-test result.' \
+              > release-notes.md
+            gh release create "$TAG" --target "$SOURCE_SHA" --title "FilmCraft Android $VERSION" --notes-file release-notes.md --draft
+          fi
+          gh release upload "$TAG" ./*.apk SHA256SUMS.txt build-arm64.json ci-source.json --clobber
+          gh release edit "$TAG" --draft=false --latest
+          gh release view "$TAG" --json url,assets --jq '{url, assets: [.assets[].name]}'

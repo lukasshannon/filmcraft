@@ -59,3 +59,39 @@ and the repository's PR template/checks must all be verified on that proposal.
 
 Do not mark CI, device coverage or upstream-policy exceptions as approved
 based only on the previous APK tests or the packaging checks above.
+
+## Automatic APK releases
+
+The fork's default integration/release branch is `android-apk`. Every push to
+that branch (including a merged PR) builds the ARM64 phone APK and publishes
+a public GitHub Release. `pull_request` runs the packaging regression tests
+without signing secrets. Actions also offers a manual run on `android-apk`.
+This workflow does not update the private download site.
+
+CI uses Rust 1.95.0, JDK 21, SDK/build-tools 35 and NDK 27.2.12479018,
+with 16 KiB native-library and APK alignment. It checks out craft-fonts at
+`43a994403242b287ab4c78499b7ff7d943ea6dba` and ships its license notices.
+Only ARM64 production builds are released; the existing x86_64 helper may
+include emulator instrumentation and is not a public release asset.
+
+Versions are `<Cargo workspace version>-android.ci.<workflow run number>`,
+with Android versionCode `1000000000 + run number`. Tags are `android-v<version>`.
+Rerunning the same workflow preserves that version and resumes the same draft
+release. A completed published release is immutable to reruns. Do not rename
+or recreate this workflow without preserving its increasing versionCode range.
+The source manifest is not modified; CI versions only the packaging copy.
+
+The build requires repository Actions secret `ANDROID_KEYSTORE_BASE64`, which
+must be base64 of this app's existing `.private/filmcraft-test.jks` (local password
+`android`, alias `filmcraft-test`). GitHub encrypts that value at rest. The workflow
+checks the public certificate fingerprint before signing, refuses to generate
+a replacement key in CI, and deletes its temporary key in an `always()` step.
+Never commit a key, base64 value or password override. For another signing
+identity, configure `ANDROID_KEY_ALIAS`, `ANDROID_STORE_PASSWORD` and
+`ANDROID_KEY_PASSWORD` in the build environment and review the pinned public
+fingerprint; changing identity prevents updates of existing installations.
+
+The release contains the versioned APK, SHA256SUMS.txt and build metadata
+recording the source commit, version and signing identity. The build job has
+read-only repository permission; only the separate publishing job gets
+`contents: write`. No PAT or long-lived GitHub credential is needed by CI.

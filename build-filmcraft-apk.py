@@ -1,6 +1,7 @@
 """Package the native Rust editor with Android platform file access; no Gradle needed."""
 from pathlib import Path
 import argparse
+from scripts.android_release import add_version_arguments, package_manifest, signing_identity
 import datetime
 import hashlib
 import json
@@ -14,14 +15,15 @@ root = Path(__file__).resolve().parent
 parser = argparse.ArgumentParser()
 parser.add_argument('--abi', choices=['arm64-v8a', 'x86_64'], default='arm64-v8a')
 parser.add_argument('--skip-rust', action='store_true')
+add_version_arguments(parser)
 args = parser.parse_args()
 target = {'arm64-v8a': 'aarch64-linux-android', 'x86_64': 'x86_64-linux-android'}[args.abi]
 sdk = Path(os.environ['ANDROID_HOME'])
 java = Path(os.environ['JAVA_HOME']) / 'bin'
-build_tools = sdk / 'build-tools' / 'android-15'
+build_tools = Path(os.environ.get('ANDROID_BUILD_TOOLS', str(sdk / 'build-tools' / 'android-15')))
 android_jar = sdk / 'platforms' / 'android-35' / 'android.jar'
 source = root / 'filmcraft-android'
-work = source / 'build' / args.abi
+work = source / 'build' / 'package' / args.abi
 work.mkdir(parents=True, exist_ok=True)
 artifacts = root / 'artifacts/filmcraft'
 artifacts.mkdir(parents=True, exist_ok=True)
@@ -29,6 +31,8 @@ artifacts.mkdir(parents=True, exist_ok=True)
 def run(*command):
     print('Running: ' + Path(str(command[0])).name, flush=True)
     subprocess.run([str(item) for item in command], check=True, cwd=root)
+
+keystore, key_alias = signing_identity(root, java, run, 'filmcraft')
 
 if not args.skip_rust:
     run('cargo', 'build', '--locked', '--manifest-path', source / 'Cargo.toml', '--release', '--target', target)
@@ -73,7 +77,10 @@ for license_file in (root / 'docs/brand').glob('LICENSE*'):
     destination = assets / 'licenses/brand' / license_file.name
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(license_file, destination)
-for attribution in (root).rglob('*.attribution'):
+# Copy only source-controlled sidecars, never packaging output recursively.
+attribution_paths = subprocess.check_output(['git', 'ls-files', '*.attribution'], cwd=root, text=True, encoding='utf-8').splitlines()
+for relative in attribution_paths:
+    attribution = root / relative
     destination = assets / 'licenses/attributions' / attribution.relative_to(root)
     destination.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(attribution, destination)
@@ -133,6 +140,7 @@ if args.abi == 'x86_64':
         '<provider android:name=".TestDocumentsProvider" android:authorities="app.filmcraft.android.test.documents" '
         'android:exported="true" android:permission="android.permission.MANAGE_DOCUMENTS" android:grantUriPermissions="true" />\n</application>'), encoding='utf-8')
     manifest_path = instrumented_manifest
+manifest_path = package_manifest(manifest_path, work, args)
 run(build_tools / 'aapt2.exe', 'link', '-o', unsigned, '-I', android_jar,
     '--manifest', manifest_path, '-A', assets, compiled)
 library = Path(os.environ.get('CARGO_TARGET_DIR', str(source / 'target'))) / target / 'release/libfilmcraft_android.so'
@@ -142,21 +150,14 @@ with zipfile.ZipFile(unsigned, 'a') as archive:
 
 aligned = work / 'aligned.apk'
 run(build_tools / 'zipalign.exe', '-f', '-P', '16', '4', unsigned, aligned)
-private = root / '.private'
-private.mkdir(exist_ok=True)
-keystore = private / 'filmcraft-test.jks'
-if not keystore.exists():
-    run(java / 'keytool.exe', '-genkeypair', '-noprompt', '-keystore', keystore, '-storepass', 'android',
-        '-keypass', 'android', '-alias', 'filmcraft-test', '-keyalg', 'RSA', '-keysize', '3072', '-validity', '10000',
-        '-dname', 'CN=FilmCraft Android Local Test, OU=Unofficial Port, O=Local Development, C=CA')
 label = 'arm64' if args.abi == 'arm64-v8a' else 'x86_64'
-manifest = ET.parse(source / 'AndroidManifest.xml').getroot()
+manifest = ET.parse(manifest_path).getroot()
 android_namespace = '{http://schemas.android.com/apk/res/android}'
 version_name = manifest.attrib[android_namespace + 'versionName']
 version_code = int(manifest.attrib[android_namespace + 'versionCode'])
 apk = artifacts / f'filmcraft-{version_name}-{label}.apk'
 run(java / 'java.exe', '-jar', build_tools / 'lib/apksigner.jar', 'sign', '--ks', keystore,
-    '--ks-key-alias', 'filmcraft-test', '--ks-pass', 'pass:android', '--key-pass', 'pass:android',
+    '--ks-key-alias', key_alias, '--ks-pass', 'env:ANDROID_STORE_PASSWORD', '--key-pass', 'env:ANDROID_KEY_PASSWORD',
     '--v4-signing-enabled', 'false', '--out', apk, aligned)
 run(java / 'java.exe', '-jar', build_tools / 'lib/apksigner.jar', 'verify', '--verbose', '--print-certs', apk)
 run(build_tools / 'zipalign.exe', '-c', '-P', '16', '4', apk)
@@ -173,7 +174,7 @@ record = {
     'built_at_utc': datetime.datetime.now(datetime.timezone.utc).isoformat(),
     'upstream': 'https://github.com/storytold/filmcraft',
     'upstream_commit': subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD'], text=True).strip(),
-    'signing': 'Locally generated test certificate, not upstream or Play Store signing',
+    'signing': 'Unofficial sideload certificate; not upstream or Play Store signing',
     'permissions': [], 'native_library_alignment': '16 KiB',
     'instrumented_emulator_build': args.abi == 'x86_64',
     'font_source': subprocess.check_output(['git', '-C', str(root / 'craft-fonts'), 'rev-parse', 'HEAD'], text=True).strip(),
